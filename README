@@ -1,0 +1,28 @@
+DESCRIPTION: 
+
+A post-download script to process videos and/or music downloaded with Transmission (running as a daemon) on Linux.
+
+If video, the script calls HandbrakeCLI to convert the video to mp4  (mostly for use on a Roku).
+
+After move/conversion the original transmission download is deleted and removed from the queue.
+
+INSTALLATION:
+
+Assuming Transmission Daemon is installed and configured:
+
+mkdir /var/lib/transmission/bin
+
+cp [scirpt files] /var/lib/transmission/bin/
+
+edit /var/lib/transmission/.config/transmission/settings.json 
+set the following 2 lines:
+
+	"script-torrent-done-enabled": true,
+	"script-torrent-done-filename": "/var/lib/transmission/bin/convert",
+
+edit /var/lib/transmission/bin/convert
+	* Set the email addresses the script should send notices to
+	* Set the MEDIADIR variable -- where you want the converted videos/music to be moved to.
+		* ensure directory structure already exists
+
+

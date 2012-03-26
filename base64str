@@ -1,0 +1,3 @@
+#!/bin/bash
+STR=$(printf "%s" "$@" | base64 -w 0)
+echo $STR

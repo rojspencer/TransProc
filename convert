@@ -1,0 +1,157 @@
+#!/bin/bash  -x
+
+# Convert video files to mp4 and move to $VIDEODIR
+
+# Environment variables passed by transmission
+# TR_APP_VERSION
+# TR_TIME_LOCALTIME
+# TR_TORRENT_DIR
+# TR_TORRENT_HASH
+# TR_TORRENT_ID
+# TR_TORRENT_NAME
+
+# CONFIGURATION OPTIONS
+
+# Space seperated list of emails address to send notices to
+# Assumes mail routing is configured properly on the localhost
+NOTIFY=""
+
+MEDIADIR='/var/www/html/media'
+VIDEODIR="${MEDIADIR}/video"
+MUSICDIR="{$MEDIADIR}/music"
+
+
+
+DOWNLOAD="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
+IS_VIDEO=false
+IS_MUSIC=false
+
+
+function convert_video {
+	# $1 = video file
+	if [[ $(basename "$1") == *[sS]ample.avi ]]; then
+		logger "$(basename $0): Ignoring sample.avi file"
+		return 0
+	fi
+	if [[ "$1" == *.mp4 ]]; then
+		cp "$1" "${VIDEODIR}/"
+		if [ $? -eq 0 ]; then
+			return 0
+		else
+			return 1
+		fi
+	fi
+	if [ -f "$1" ]; then
+		FILE=$(basename "$1")
+		DEST="${VIDEODIR}/${FILE%\.*}.mp4"
+		logger "$(basename $0): converting ${FILE}"
+		HandBrakeCLI -O -i "$1" -o "${DEST}"
+		if [ -f "${DEST}" ]; then	
+			return 0
+		fi
+	fi
+	return 1
+
+}
+
+function send_mail_notice {
+	
+	if [ "$NOTIFY" -ne "" ]; then
+		SUBJECT="Download complete"
+		
+		mail -s "${SUBJECT}" ${NOTIFY} <<-EOF
+		Your download of "${TR_TORRENT_NAME}" has completed and is ready for use on the Roku.
+
+		Enjoy!
+		EOF
+	fi
+
+}
+
+function send_mail_alert {
+	if [ "$NOTIFY" -ne "" ]; then
+		SUBJECT="Unkown download complete"
+
+		mail -s "${SUBJECT}" ${NOTIFY} <<-EOF
+		Your download of "${TR_TORRENT_NAME}" has completed by I don't know what kind of file it is.
+
+		Manual interviention required before it can be used on the Roku.
+
+		Might need to ask Roger for help.  ;)
+
+		EOF
+	fi
+
+}
+
+function send_mail_error {
+	if [ "$NOTIFY" -ne "" ]; then
+		SUBJECT="Error in Download"
+
+		mail -s "${SUBJECT}" ${NOTIFY} <<-EOF
+		$1
+
+		EOF
+	fi
+}
+
+function delete_torrent {
+	transmission-remote -t ${TR_TORRENT_ID} --remove-and-delete
+}
+
+# single file download
+if [ -f "${DOWNLOAD}" ]; then
+	if [[ $(file -b "${DOWNLOAD}") == *video* ]] || [[ "${DOWNLOAD}" == *.mkv ]] || [[ "${DOWNLOAD}" == *.avi ]] || [[ "${DOWNLOAD}" == *.mp4 ]]; then
+		IS_VIDEO=true
+		convert_video "${DOWNLOAD}"
+		if [ $? -eq 0 ] ; then
+			delete_torrent
+			send_mail_notice
+		else
+			send_mail_error "Error converting video ${DOWNLOAD}"
+		fi
+	elif [[ $(file -b "${DOWNLOAD}") == Audio\ file* ]]; then
+		IS_MUSIC=true
+		mv "${DOWNLOAD}" "${MUSICDIR}/"
+		delete_torrent
+		send_mail_notice
+	else
+		logger "Unknown file type: ${DOWNLOAD}"
+		send_mail_alert
+	fi
+	exit 0
+fi
+
+# download is a directory of multiple files
+if [ -d "${DOWNLOAD}" ]; then
+	for FILE in $(find "${DOWNLOAD}" -type f -exec $(dirname $0)/base64str '{}' \; );do
+		FILE_NAME="$(echo -n "${FILE}" | base64 -d)"
+		if [[ $(file -b "${FILE_NAME}") == *video* ]] || [[ "${FILE_NAME}" == *.mkv ]] || [[ "${FILE_NAME}" == *.avi ]] || [[ "${FILE_NAME}" == *.mp4 ]]; then
+			IS_VIDEO=true
+			VIDEO_CONVERTED=false
+			convert_video "${FILE_NAME}"
+			if [ $? -eq 0 ]; then
+				VIDEO_CONVERTED=true
+			fi
+		fi
+	done
+	if $IS_VIDEO && $VIDEO_CONVERTED ; then
+		delete_torrent
+		send_mail_notice
+	else
+		send_mail_error "Error converting video files: ${DOWNLOAD}"
+	fi
+fi
+
+if ! ${IS_VIDEO} ; then
+	if $(find "${DOWNLOAD}" -iname "*.mp3" | read); then
+		IS_MUSIC=true
+		# delete any non mp3 files (playlists, torrent advertising, etc) but keep album art
+		find "${DOWNLOAD}" -type f \! -iname "*.mp3" \! -iname "*.jpg" \! -iname "*.png" -exec rm -f '{}' \;
+		mv "${DOWNLOAD}" "${MUSICDIR}/"
+		chmod 775 "${MUSICDIR}/${TR_TORRENT_NAME}"
+		find "${MUSICDIR}/${TR_TORRENT_NAME}" -type d -exec chmod 775 '{}' \;
+		delete_torrent
+		send_mail_notice
+	fi
+fi
