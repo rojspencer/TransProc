@@ -56,7 +56,7 @@ function convert_video {
 
 function send_mail_notice {
 	
-	if [ "$NOTIFY" -ne "" ]; then
+	if [ "$NOTIFY" != "" ]; then
 		SUBJECT="Download complete"
 		
 		mail -s "${SUBJECT}" ${NOTIFY} <<-EOF
@@ -69,7 +69,7 @@ function send_mail_notice {
 }
 
 function send_mail_alert {
-	if [ "$NOTIFY" -ne "" ]; then
+	if [ "$NOTIFY" != "" ]; then
 		SUBJECT="Unkown download complete"
 
 		mail -s "${SUBJECT}" ${NOTIFY} <<-EOF
@@ -85,7 +85,7 @@ function send_mail_alert {
 }
 
 function send_mail_error {
-	if [ "$NOTIFY" -ne "" ]; then
+	if [ "$NOTIFY" != "" ]; then
 		SUBJECT="Error in Download"
 
 		mail -s "${SUBJECT}" ${NOTIFY} <<-EOF
