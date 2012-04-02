@@ -70,7 +70,7 @@ function send_mail_notice {
 
 function send_mail_alert {
 	if [ "$NOTIFY" != "" ]; then
-		SUBJECT="Unkown download complete"
+		SUBJECT="Unknown download complete"
 
 		mail -s "${SUBJECT}" ${NOTIFY} <<-EOF
 		Your download of "${TR_TORRENT_NAME}" has completed by I don't know what kind of file it is.
