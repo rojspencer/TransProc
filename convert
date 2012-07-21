@@ -10,17 +10,9 @@
 # TR_TORRENT_ID
 # TR_TORRENT_NAME
 
-# CONFIGURATION OPTIONS
+# Bring in the settings
 
-# Space seperated list of emails address to send notices to
-# Assumes mail routing is configured properly on the localhost
-NOTIFY=""
-
-MEDIADIR='/var/www/html/media'
-VIDEODIR="${MEDIADIR}/video"
-MUSICDIR="${MEDIADIR}/music"
-
-
+. ./settings
 
 DOWNLOAD="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
 IS_VIDEO=false
@@ -51,6 +43,91 @@ function convert_video {
 		fi
 	fi
 	return 1
+
+}
+
+function is_tv_show {
+	# $1 basename of video
+
+	# if file name contains SxxExx 
+	if `echo $1 | egrep -q 'S[0-9][0-9]E[0-9][0-9]'`; then
+		return 0
+	fi
+
+	# Contains date format
+	if `echo $1 | egrep -q '[0-9]{4}\.[0-9]{2}\.[0-9]{2}'`; then
+		return 0
+	fi
+
+	return 1
+
+}
+
+# Construct path to place video in tv/show name/Seasion #/
+function tv_show_path {
+
+        SHOW_NAME="none"
+        # get the episode expression
+        if `echo $1 | egrep -q 'S[0-9][0-9]E[0-9][0-9]'`; then
+                SHOW_NAME=$(echo "$1" | sed 's/\.S[0-9][0-9]E[0-9][0-9].*//' | tr \. \ )
+                SHOW_SEASON=$(echo "$1" | sed 's/^.*S\([0-9][0-9]\).*/\1/' | sed 's/0.*\([0-9].*\)/\1/')
+        fi
+        if `echo $1 | egrep -q '[0-9]{4}\.[0-9]{2}\.[0-9]{2}'`; then
+                SHOW_NAME=$(echo "$1" | sed 's/\.[0-9]\{4\}\.[0-9]\{2\}\.[0-9]\{2\}.*$//' | tr \. \ )
+                # Show season isn't contained in date -- going to have to hard code for now
+                case "$SHOW_NAME" in
+                        'The Daily Show')
+                                SHOW_SEASON=17
+                                ;;
+                        'The Colbert Report')
+                                SHOW_SEASON=8
+                                ;;
+                        *)
+                                SHOW_SEASON=0
+                                ;;
+                esac
+        fi
+
+        if [ "$SHOW_NAME" = "none" ]; then
+		logger "Unable to determine show name of: $1"
+                echo '.'
+                return 0
+        fi
+
+        SHOW_PATH="${SHOW_NAME}/Season ${SHOW_SEASON}"
+
+        if [ ! -d "${TVDIR}/${SHOW_PATH}" ]; then
+                mkdir -p "${TVDIR}/${SHOW_PATH}"
+        fi
+
+        echo "$SHOW_PATH"
+
+}
+
+# Switching to PLEX -- just move the video over
+function move_video {
+	# $1 = video file
+	if [[ $(basename "$1") == *[sS]ample.avi ]]; then
+		logger "$(basename $0): Ignoring sample.avi file"
+		return 0
+	fi
+
+	if $(is_tv_show  $(basename "$1")); then
+		SHOW_DIR=$(tv_show_path $(basename "$1"))
+		mv "$1" "${TVDIR}/${SHOW_DIR}/"
+		if [ $? -eq 0 ]; then
+			logger "Moved $1 to ${TVDIR}/${SHOW_DIR}"
+			return 0
+		fi
+	else
+		mv "$1" "${VIDEODIR}/"
+		if [ $? -eq 0 ]; then
+			logger "Moved $1 to ${VIDEODIR}/"
+			return 0
+		fi
+	fi
+	return 1
+
 
 }
 
@@ -103,7 +180,7 @@ function delete_torrent {
 if [ -f "${DOWNLOAD}" ]; then
 	if [[ $(file -b "${DOWNLOAD}") == *video* ]] || [[ "${DOWNLOAD}" == *.mkv ]] || [[ "${DOWNLOAD}" == *.avi ]] || [[ "${DOWNLOAD}" == *.mp4 ]]; then
 		IS_VIDEO=true
-		convert_video "${DOWNLOAD}"
+		move_video "${DOWNLOAD}"
 		if [ $? -eq 0 ] ; then
 			delete_torrent
 			send_mail_notice
@@ -129,7 +206,7 @@ if [ -d "${DOWNLOAD}" ]; then
 		if [[ $(file -b "${FILE_NAME}") == *video* ]] || [[ "${FILE_NAME}" == *.mkv ]] || [[ "${FILE_NAME}" == *.avi ]] || [[ "${FILE_NAME}" == *.mp4 ]]; then
 			IS_VIDEO=true
 			VIDEO_CONVERTED=false
-			convert_video "${FILE_NAME}"
+			move_video "${FILE_NAME}"
 			if [ $? -eq 0 ]; then
 				VIDEO_CONVERTED=true
 			fi

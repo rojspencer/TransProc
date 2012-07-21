@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Settings for TransProc
+
+# CONFIGURATION OPTIONS
+
+# Space seperated list of emails address to send notices to
+# Assumes mail routing is configured properly on the localhost
+NOTIFY=""
+
+MEDIADIR='/var/www/html/media'
+VIDEODIR="${MEDIADIR}/video"
+TVDIR="${MEDIADIR}/tv"
+MUSICDIR="${MEDIADIR}/music"
+
+
+
