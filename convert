@@ -1,4 +1,4 @@
-#!/bin/bash  
+#!/bin/bash 
 
 # Convert video files to mp4 and move to $VIDEODIR
 
@@ -12,12 +12,14 @@
 
 # Bring in the settings
 
-. ./settings
+. "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/settings"
 
 DOWNLOAD="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
 IS_VIDEO=false
 IS_MUSIC=false
 
+# Temporary to disable for a real bad rar torrent coming down
+#exit
 
 function convert_video {
 	# $1 = video file
@@ -50,7 +52,7 @@ function is_tv_show {
 	# $1 basename of video
 
 	# if file name contains SxxExx 
-	if `echo $1 | egrep -q 'S[0-9][0-9]E[0-9][0-9]'`; then
+	if `echo $1 | egrep -q '[Ss][0-9][0-9][Ee][0-9][0-9]'`; then
 		return 0
 	fi
 
@@ -68,10 +70,13 @@ function tv_show_path {
 
         SHOW_NAME="none"
         # get the episode expression
-        if `echo $1 | egrep -q 'S[0-9][0-9]E[0-9][0-9]'`; then
-                SHOW_NAME=$(echo "$1" | sed 's/\.S[0-9][0-9]E[0-9][0-9].*//' | tr \. \ )
-                SHOW_SEASON=$(echo "$1" | sed 's/^.*S\([0-9][0-9]\).*/\1/' | sed 's/0.*\([0-9].*\)/\1/')
+	# For S00E00 or s00e00
+        if `echo $1 | egrep -q '[Ss][0-9][0-9][Ee][0-9][0-9]'`; then
+                SHOW_NAME=$(echo "$1" | sed 's/[.-][Ss][0-9][0-9][Ee][0-9][0-9].*//' | tr \. \ )
+                SHOW_SEASON=$(echo "$1" | sed 's/^.*[Ss]\([0-9][0-9]\).*/\1/' | sed 's/0.*\([0-9].*\)/\1/')
         fi
+
+	# Shows based on date format
         if `echo $1 | egrep -q '[0-9]{4}\.[0-9]{2}\.[0-9]{2}'`; then
                 SHOW_NAME=$(echo "$1" | sed 's/\.[0-9]\{4\}\.[0-9]\{2\}\.[0-9]\{2\}.*$//' | tr \. \ )
                 # Show season isn't contained in date -- going to have to hard code for now
@@ -173,7 +178,10 @@ function send_mail_error {
 }
 
 function delete_torrent {
-	transmission-remote -t ${TR_TORRENT_ID} --remove-and-delete
+	# Need to leave iptorrents seeding until they reach a ratio of 1.0
+	if ! `echo $TR_TORRENT_DIR | grep -q iptorrents`; then
+		transmission-remote -t ${TR_TORRENT_ID} --remove-and-delete
+	fi
 }
 
 # single file download
